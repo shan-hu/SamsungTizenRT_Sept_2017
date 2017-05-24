@@ -13,6 +13,7 @@ CFLAGS += -I$(ARTIK_SDK_DIR)/include/base
 CFLAGS += -I$(ARTIK_SDK_DIR)/include/systemio
 CFLAGS += -I$(ARTIK_SDK_DIR)/include/connectivity
 CFLAGS += -I$(ARTIK_SDK_DIR)/include/wifi
+CFLAGS += -I$(ARTIK_SDK_DIR)/include/lwm2m
 CFLAGS += -I$(TOPDIR)/net
 CFLAGS += -I$(APPDIR)/include
 CFLAGS += -I$(APPDIR)/include/netutils

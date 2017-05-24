@@ -162,4 +162,11 @@ config ARTIK_SDK_WIFI
 	---help---
 		include the Wi-Fi library of the ARTIK SDK
 
+config ARTIK_SDK_LWM2M
+	bool "ARTIK SDK - LWM2M library"
+	select EXAMPLES_LWM2M
+	default n
+	---help---
+		include the LWM2M library of the ARTIK SDK
+
 endif
