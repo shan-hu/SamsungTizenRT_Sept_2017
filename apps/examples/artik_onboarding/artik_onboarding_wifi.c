@@ -7,6 +7,7 @@
 #include <wifi/slsi_wifi_api.h>
 #include <apps/netutils/mdnsd.h>
 #include <apps/netutils/netlib.h>
+#include <apps/netutils/ntpclient.h>
 #include <artik_module.h>
 #include <artik_wifi.h>
 #include <artik_network.h>
@@ -45,6 +46,16 @@ static sem_t g_sem_link;
 static uint8_t g_join_result = 0;
 static char *g_wifi_scan_results = NULL;
 static char g_ap_ssid[32] = "";
+
+static struct ntpc_server_conn_s ntp_server_conn = {
+    "0.pool.ntp.org",
+    123
+};
+
+static void ntp_link_error(void)
+{
+    printf("NTP error\n");
+}
 
 void WifiResetConfig()
 {
@@ -463,6 +474,15 @@ artik_error StartStationConnection(bool start)
             ret = E_BUSY;
             goto exit;
         }
+
+        /* Wait a bit for the network configuration to settle */
+        sleep(1);
+
+        /* Set date and time using NTP */
+        if (ntpc_start(&ntp_server_conn, 1, 60, ntp_link_error) < 0) {
+            printf("Failed to start NTP server. The date may be incorrect"
+                " and lead to undefined behavior\n");
+        }
     } else {
 
         if (g_mode != ARTIK_WIFI_MODE_STATION) {
@@ -479,6 +499,8 @@ artik_error StartStationConnection(bool start)
             printf("Failed to leave WiFi network (%d)\n", ret);
             goto exit;
         }
+
+        ntpc_stop();
 
         StartDHCPClient(false);
 

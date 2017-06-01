@@ -23,6 +23,7 @@
 struct ArtikCloudConfig cloud_config;
 
 static artik_websocket_handle g_ws_handle = NULL;
+bool cloud_secure_dt = false;
 
 void CloudResetConfig(void)
 {
@@ -168,7 +169,7 @@ static pthread_addr_t websocket_start_cb(void *arg)
     }
 
     ret = cloud->websocket_open_stream(&g_ws_handle, cloud_config.device_token,
-            cloud_config.device_id, true);
+            cloud_config.device_id, cloud_secure_dt);
     if (ret != S_OK) {
         printf("Failed to open websocket to cloud (err=%d)\n", ret);
         goto exit;
@@ -318,13 +319,18 @@ static pthread_addr_t get_device_cb(void *arg)
     snprintf(bearer, 128, "Bearer %s", cloud_config.device_token);
     fields[0].data = bearer;
 
-    /* Build up url with parameters */
-    snprintf(url, 256, "https://s-api.artik.cloud/v1.1/devices/%s?properties=false",
-            cloud_config.device_id);
-
-    /* Prepare the SSL configuration */
+    /* Prepare the SSL configuration and URL*/
     memset(&ssl_config, 0, sizeof(ssl_config));
-    ssl_config.use_se = true;
+
+    if (cloud_secure_dt) {
+        snprintf(url, 256, "https://s-api.artik.cloud/v1.1/devices/%s?properties=false",
+                cloud_config.device_id);
+        ssl_config.use_se = true;
+    } else {
+        snprintf(url, 256, "https://api.artik.cloud/v1.1/devices/%s?properties=false",
+                cloud_config.device_id);
+        ssl_config.use_se = false;
+    }
 
     ret = http->get(url, &headers, &response, NULL, &ssl_config);
     if (ret != S_OK) {
@@ -624,6 +630,17 @@ int CompleteSDRRegistration(char **resp)
 
 exit:
     return status;
+}
+
+bool CloudIsSecureDeviceType(const char *dtid)
+{
+    /* It would be better to read the device type
+     * characteristics from the cloud to figure
+     * out if the DT is SDR-enabled. For now
+     * we just consider the default DTID is
+     * the only one considered as secure.
+     */
+    return !strncmp(dtid, AKC_DEFAULT_DTID, AKC_DTID_LEN);
 }
 
 

@@ -14,6 +14,9 @@ enum ServiceState current_service_state = STATE_IDLE;
 
 static pthread_addr_t start_onboarding(pthread_addr_t arg)
 {
+    /* Check if AKC device type requires secure communication */
+    cloud_secure_dt = CloudIsSecureDeviceType(cloud_config.device_type_id);
+
     /* If we already have Wifi credentials, try to connect to the hotspot */
     if (strlen(wifi_config.ssid) > 0) {
         if (StartStationConnection(true) == S_OK) {
@@ -59,11 +62,26 @@ static int onboard_main(int argc, char *argv[])
     int ret = 0;
     pthread_t tid;
 
-    if ((argc > 1) && !strcmp(argv[1], "reset")) {
-        ResetConfiguration();
-        printf("Onboarding configuration was reset. Reboot the board"
-                " to return to onboarding mode\n");
-        goto exit;
+    if (argc > 1) {
+        if (!strcmp(argv[1], "reset")) {
+            ResetConfiguration();
+            printf("Onboarding configuration was reset. Reboot the board"
+                    " to return to onboarding mode\n");
+            goto exit;
+        } else if (!strcmp(argv[1], "dtid")) {
+            if (argc < 3) {
+                printf("Missing parameter\n");
+                printf("Usage: onboard dtid <device type ID>\n");
+                goto exit;
+            }
+
+            strncpy(cloud_config.device_type_id, argv[2], AKC_DTID_LEN);
+            SaveConfiguration();
+            goto exit;
+        } else if (!strcmp(argv[1], "config")) {
+            PrintConfiguration();
+            goto exit;
+        }
     }
 
     /* If already in onboarding mode, do nothing */

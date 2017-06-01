@@ -51,6 +51,7 @@ struct ArtikCloudConfig {
 };
 
 extern struct ArtikCloudConfig cloud_config;
+extern bool cloud_secure_dt;
 
 void CloudResetConfig(void);
 artik_error StartCloudWebsocket(bool start);
@@ -58,6 +59,7 @@ artik_error SendMessageToCloud(char *message);
 bool ValidateCloudDevice(void);
 int StartSDRRegistration(char **resp);
 int CompleteSDRRegistration(char **resp);
+bool CloudIsSecureDeviceType(const char *dtid);
 
 /*
  * Web server related exports
@@ -75,6 +77,7 @@ artik_error StartWebServer(bool, enum ApiSet);
 artik_error InitConfiguration(void);
 artik_error SaveConfiguration(void);
 artik_error ResetConfiguration(void);
+void PrintConfiguration(void);
 
 #define API_ERROR_OK              "0"
 #define API_ERROR_INVALID_JSON    "100"

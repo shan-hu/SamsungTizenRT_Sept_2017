@@ -9,7 +9,7 @@
 
 static char config_file[16] = "/mnt/config";
 
-static void PrintConfig(void)
+void PrintConfiguration(void)
 {
     printf("Wifi:\n");
     printf("\tssid: %s\n", wifi_config.ssid);
@@ -51,8 +51,6 @@ artik_error InitConfiguration(void)
     }
 
 exit:
-    //PrintConfig();
-
     return err;
 }
 
