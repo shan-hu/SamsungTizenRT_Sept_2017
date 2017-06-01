@@ -21,6 +21,7 @@ CSRCS += artik_onboarding_rest.c
 CSRCS += artik_onboarding_cloud.c
 CSRCS += artik_onboarding_wifi.c
 CSRCS += artik_onboarding_config.c
+CSRCS += artik_onboarding_lwm2m.c
 MAINSRC = artik_onboarding.c
 
 CSRCS += $(wildcard $(API_DIR)/*.c)

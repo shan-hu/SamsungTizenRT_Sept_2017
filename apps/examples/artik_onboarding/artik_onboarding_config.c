@@ -20,6 +20,9 @@ void PrintConfiguration(void)
     printf("\tdevice_id: %s\n", cloud_config.device_id);
     printf("\tdevice_token: %s\n", cloud_config.device_token);
     printf("\tdevice_type_id: %s\n", cloud_config.device_type_id);
+
+    printf("Lwm2m:\n");
+    printf("\tis_ota_update: %d\n", lwm2m_state.is_ota_update);
 }
 
 artik_error InitConfiguration(void)
@@ -30,7 +33,7 @@ artik_error InitConfiguration(void)
 
     stat(config_file, &st);
 
-    if (st.st_size != (sizeof(wifi_config) + sizeof(cloud_config))) {
+    if (st.st_size != (sizeof(wifi_config) + sizeof(cloud_config) + sizeof(lwm2m_state))) {
         printf("Invalid configuration, creating default one\n");
 
         err = ResetConfiguration();
@@ -46,6 +49,7 @@ artik_error InitConfiguration(void)
         lseek(fd, 0, SEEK_SET);
         read(fd, (void *)&wifi_config, sizeof(wifi_config));
         read(fd, (void *)&cloud_config, sizeof(cloud_config));
+        read(fd, (void *)&lwm2m_state, sizeof(lwm2m_state));
 
         close(fd);
     }
@@ -72,6 +76,9 @@ artik_error SaveConfiguration(void)
     ret = write(fd, (const void *)&cloud_config, sizeof(cloud_config));
     if (ret != sizeof(cloud_config))
         printf("Failed to write wifi config (%d - errno=%d)\n", ret, errno);
+    ret = write(fd, (const void *)&lwm2m_state, sizeof(lwm2m_state));
+    if (ret != sizeof(lwm2m_state))
+        printf("Failed to write lwm2m state (%d - errno=%d)\n", ret, errno);
 
     close(fd);
 
@@ -82,6 +89,7 @@ artik_error ResetConfiguration(void)
 {
     WifiResetConfig();
     CloudResetConfig();
+    Lwm2mResetConfig();
 
     return SaveConfiguration();
 }

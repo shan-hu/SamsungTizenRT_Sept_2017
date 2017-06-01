@@ -14,6 +14,8 @@ enum ServiceState current_service_state = STATE_IDLE;
 
 static pthread_addr_t start_onboarding(pthread_addr_t arg)
 {
+    printf("Onboarding service version %s\n", ONBOARDING_VERSION);
+
     /* Check if AKC device type requires secure communication */
     cloud_secure_dt = CloudIsSecureDeviceType(cloud_config.device_type_id);
 
@@ -26,8 +28,15 @@ static pthread_addr_t start_onboarding(pthread_addr_t arg)
                 /* Validate if device ID/token pair is valid */
                 if (ValidateCloudDevice()) {
                     if (StartCloudWebsocket(true) == S_OK) {
-                        printf("ARTIK Cloud connection started\n");
-                        goto exit;
+                        sleep(1);
+                        if (StartLwm2m(true) == S_OK) {
+                            printf("ARTIK Cloud connection started\n");
+                            goto exit;
+                        } else {
+                            printf("Failed to start DM connection, switching back to onboarding mode\n");
+                        }
+                    } else {
+                        printf("Failed to start ARTIK Cloud connection, switching back to onboarding mode\n");
                     }
                 } else {
                     printf("Device not recognized by ARTIK Cloud, switching back to onboarding mode\n");

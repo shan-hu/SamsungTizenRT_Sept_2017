@@ -269,6 +269,9 @@ static void poll_lwm2m_sockets(client_data_t **clients, int number_clients, int 
     }
 
     pfds = malloc(sizeof(struct pollfd)*number_clients);
+    if (pfds == NULL)
+        return;
+
     memset(pfds, 0, sizeof(struct pollfd)*number_clients);
 
     for (i = 0; i < number_clients; i++)
@@ -317,6 +320,7 @@ static void poll_lwm2m_sockets(client_data_t **clients, int number_clients, int 
 #ifdef WITH_LOGS
                     fprintf(stderr, "Error in recvfrom(): %d %s\r\n", errno, strerror(errno));
 #endif
+                    free(pfds);
                     return;
                 }
                 break;
@@ -327,6 +331,7 @@ static void poll_lwm2m_sockets(client_data_t **clients, int number_clients, int 
 #ifdef WITH_LOGS
                     fprintf(stderr, "Error in recv(): %d %s\r\n", errno, strerror(errno));
 #endif
+                    free(pfds);
                     return;
                 }
                 break;
@@ -339,6 +344,7 @@ static void poll_lwm2m_sockets(client_data_t **clients, int number_clients, int 
 #endif
                 if (numBytes < 1)
                 {
+                    free(pfds);
                     return;
                 }
                 break;
@@ -346,6 +352,7 @@ static void poll_lwm2m_sockets(client_data_t **clients, int number_clients, int 
 #ifdef WITH_LOGS
                 fprintf(stderr, "Error data->proto = %d is not supported.\r\n", data->proto);
 #endif
+                free(pfds);
                 return;
         }
 

@@ -1,6 +1,8 @@
 #ifndef _ARTIK_ONBOARDING_H_
 #define _ARTIK_ONBOARDING_H_
 
+#define ONBOARDING_VERSION "1.5.0"
+
 /*
  * Service states
  */
@@ -12,6 +14,17 @@ enum ServiceState {
 
 extern enum ServiceState current_service_state;
 
+/*
+ * LWM2M related exports
+ */
+struct Lwm2mState {
+    char is_ota_update;
+};
+
+extern struct Lwm2mState lwm2m_state;
+
+artik_error StartLwm2m(bool start);
+void Lwm2mResetConfig(void);
 /*
  * WiFi related exports
  */

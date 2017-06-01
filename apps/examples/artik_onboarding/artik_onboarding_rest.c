@@ -79,6 +79,18 @@ const char artik_srv_key_rsa[] =
 
 static struct http_server_t *https_server = NULL;
 
+static pthread_addr_t start_websocket(pthread_addr_t arg)
+{
+    StartMDNSService(false);
+    StartWebServer(false, API_SET_CLOUD);
+    if (StartCloudWebsocket(true) == S_OK)
+        printf("ARTIK Cloud connection started\n");
+    if (StartLwm2m(true) == S_OK)
+        printf("LWM2M connection started\n");
+
+    return NULL;
+}
+
 static void get_akc_callback(struct http_client_t *client, struct http_req_message *req)
 {
     struct http_keyvalue_list_t headers;
@@ -115,7 +127,6 @@ static void set_akc_callback(struct http_client_t *client, struct http_req_messa
     cJSON *config, *tmp;
     char resp[128];
     char length[32];
-    bool start_websocket = false;
 
     printf("POST %s\n", msg->url);
 
@@ -145,7 +156,11 @@ static void set_akc_callback(struct http_client_t *client, struct http_req_messa
 
     SaveConfiguration();
 
-    start_websocket = true;
+    /* Start connection to ARTIK Cloud */
+    pthread_t tid;
+    pthread_create(&tid, NULL, start_websocket, NULL);
+    pthread_detach(tid);
+
     strncpy(resp, RESP_ERROR_OK, sizeof(resp)-1);
 
 exit:
@@ -162,12 +177,6 @@ exit:
 
     if (config)
         cJSON_Delete(config);
-
-    /* Send response before starting Cloud websocket */
-    if (start_websocket) {
-        if (StartCloudWebsocket(true) == S_OK)
-            printf("ARTIK Cloud connection started\n");
-    }
 }
 
 static void get_ap_callback(struct http_client_t *client, struct http_req_message *req)
@@ -366,16 +375,6 @@ static void get_akc_registration_callback(struct http_client_t *client, struct h
 
     if (resp)
         free(resp);
-}
-
-static pthread_addr_t start_websocket(pthread_addr_t arg)
-{
-    StartMDNSService(false);
-    StartWebServer(false, API_SET_CLOUD);
-    if (StartCloudWebsocket(true) == S_OK)
-        printf("ARTIK Cloud connection started\n");
-
-    return NULL;
 }
 
 static void put_akc_registration_callback(struct http_client_t *client, struct http_req_message *msg)

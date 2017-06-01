@@ -1,17 +1,28 @@
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/boardctl.h>
 
 #include <artik_module.h>
 #include <artik_cloud.h>
+#include <artik_http.h>
 #include <artik_lwm2m.h>
 
 #include "command.h"
 
 #define	FAIL_AND_EXIT(x)  { fprintf(stderr, x); usage(argv[1], cloud_commands); ret = -1; goto exit; }
 
+#define OTA_FIRMWARE_VERSION "1.0.0"
+#define OTA_FIRMWARE_HEADER_SIZE	4096
 #define UUID_MAX_LEN                64
 #define LWM2M_RES_DEVICE_REBOOT     "/3/0/4"
+
+typedef struct {
+	char header[OTA_FIRMWARE_HEADER_SIZE];
+	size_t remaining_header_size;
+	size_t offset;
+	int fd;
+} ota_info_t;
 
 static int device_command(int argc, char *argv[]);
 static int devices_command(int argc, char *argv[]);
@@ -25,6 +36,7 @@ static int dm_command(int argc, char *argv[]);
 static artik_websocket_handle ws_handle = NULL;
 static artik_lwm2m_config *g_dm_config = NULL;
 static artik_lwm2m_handle g_dm_client = NULL;
+static ota_info_t *g_dm_info = NULL;
 
 const struct command cloud_commands[] = {
 	{ "device", "device <token> <device id> [<properties>]", device_command },
@@ -330,6 +342,13 @@ static pthread_addr_t delayed_reboot(pthread_addr_t arg)
 	return NULL;
 }
 
+static void reboot(void) {
+	pthread_t tid;
+	pthread_create(&tid, NULL, delayed_reboot, NULL);
+	pthread_detach(tid);
+	fprintf(stderr, "Rebooting in 3 seconds\n");
+}
+
 static void dm_on_execute_resource(void *data, void *user_data)
 {
 	char *uri = (char *)data;
@@ -337,18 +356,208 @@ static void dm_on_execute_resource(void *data, void *user_data)
 	fprintf(stderr, "LWM2M resource execute: %s\n", uri);
 
 	if (!strncmp(uri, LWM2M_RES_DEVICE_REBOOT, strlen(LWM2M_RES_DEVICE_REBOOT))) {
-		pthread_t tid;
-		pthread_create(&tid, NULL, delayed_reboot, NULL);
-		pthread_detach(tid);
-		fprintf(stderr, "Rebooting in 3 seconds\n");
+		reboot();
 	}
+
+	if (!strncmp(uri, ARTIK_LWM2M_URI_FIRMWARE_UPDATE, ARTIK_LWM2M_URI_LEN)) {
+		artik_lwm2m_module *lwm2m = NULL;
+
+		lwm2m = (artik_lwm2m_module *)artik_request_api_module("lwm2m");
+		if (!lwm2m) {
+			fprintf(stderr, "Failed to request LWM2M module\n");
+			return;
+		}
+		lwm2m->client_write_resource(
+			g_dm_client,
+			ARTIK_LWM2M_URI_FIRMWARE_UPDATE_RES,
+			(unsigned char*)ARTIK_LWM2M_FIRMWARE_UPD_RES_DEFAULT,
+			strlen(ARTIK_LWM2M_FIRMWARE_UPD_RES_DEFAULT));
+		lwm2m->client_write_resource(
+			g_dm_client,
+			ARTIK_LWM2M_URI_FIRMWARE_STATE,
+			(unsigned char*)ARTIK_LWM2M_FIRMWARE_STATE_UPDATING,
+			strlen(ARTIK_LWM2M_FIRMWARE_STATE_UPDATING));
+		int fd =  open("/dev/mtdblock7", O_RDWR);
+		write(fd, g_dm_info->header, OTA_FIRMWARE_HEADER_SIZE);
+		close(fd);
+/*		lwm2m->client_write_resource(
+			g_dm_client,
+			ARTIK_LWM2M_URI_FIRMWARE_UPDATE_RES,
+			(unsigned char*)ARTIK_LWM2M_FIRMWARE_UPD_RES_SUCCESS,
+			strlen(ARTIK_LWM2M_FIRMWARE_UPD_RES_SUCCESS));
+		lwm2m->client_write_resource(
+			g_dm_client,
+			ARTIK_LWM2M_URI_FIRMWARE_STATE,
+			(unsigned char*)ARTIK_LWM2M_FIRMWARE_STATE_IDLE,
+			strlen(ARTIK_LWM2M_FIRMWARE_STATE_IDLE));*/
+		reboot();
+	}
+}
+
+static int write_firmware(char *data, size_t len, void *user_data) {
+	int header_size = 0;
+
+	if (g_dm_info->remaining_header_size > 0)
+	{
+		header_size = len > g_dm_info->remaining_header_size ? g_dm_info->remaining_header_size : len;
+		memcpy(g_dm_info->header + g_dm_info->offset, data, header_size);
+		len -= header_size;
+		g_dm_info->remaining_header_size -= header_size;
+		g_dm_info->offset += header_size;
+		printf("Skip OTA header (header_size %d, len %d, remaining_header_size %d)\n", header_size, len, g_dm_info->remaining_header_size);
+	}
+
+	if (len > 0)
+		write(g_dm_info->fd, data+header_size, len);
+
+	return len;
+}
+
+static int download_firmware(int argc, char *argv[]) {
+	artik_lwm2m_module *lwm2m = (artik_lwm2m_module *)artik_request_api_module("lwm2m");
+	artik_http_module *http = (artik_http_module *)artik_request_api_module("http");
+	artik_ssl_config ssl_conf;
+	int status = 0;
+
+	artik_error ret;
+	artik_http_headers headers;
+	artik_http_header_field fields[] = {
+		{ "User-Agent", "Artik Firmware Updater"}
+	};
+
+	g_dm_info = malloc(sizeof(ota_info_t));
+	memset(g_dm_info, 0, sizeof(ota_info_t));
+	g_dm_info->remaining_header_size = OTA_FIRMWARE_HEADER_SIZE;
+
+	if (!lwm2m) {
+		fprintf(stderr, "Failed to request LWM2M module\n");
+		return 1;
+	}
+
+	if (!http) {
+		lwm2m->client_write_resource(
+			g_dm_client,
+			ARTIK_LWM2M_URI_FIRMWARE_UPDATE_RES,
+			(unsigned char*)ARTIK_LWM2M_FIRMWARE_UPD_RES_URI_ERR,
+			strlen(ARTIK_LWM2M_FIRMWARE_UPD_RES_URI_ERR));
+
+		lwm2m->client_write_resource(
+			g_dm_client,
+			ARTIK_LWM2M_URI_FIRMWARE_STATE,
+			(unsigned char*)ARTIK_LWM2M_FIRMWARE_STATE_IDLE,
+			strlen(ARTIK_LWM2M_FIRMWARE_STATE_IDLE));
+		artik_release_api_module(lwm2m);
+		return 1;
+	}
+
+	headers.fields = fields;
+	headers.num_fields = sizeof(fields) / sizeof(fields[0]);
+	memset(&ssl_conf, 0, sizeof(artik_ssl_config));
+	ssl_conf.verify_cert = ARTIK_SSL_VERIFY_NONE;
+	g_dm_info->fd = open("/dev/mtdblock7", O_RDWR);
+	lseek(g_dm_info->fd, 4096, SEEK_SET);
+	ret = http->get_stream(argv[1], &headers, &status, write_firmware, NULL, &ssl_conf);
+	if (ret != S_OK) {
+		lwm2m->client_write_resource(
+			g_dm_client,
+			ARTIK_LWM2M_URI_FIRMWARE_UPDATE_RES,
+			(unsigned char*)ARTIK_LWM2M_FIRMWARE_UPD_RES_URI_ERR,
+			strlen(ARTIK_LWM2M_FIRMWARE_UPD_RES_URI_ERR));
+
+		lwm2m->client_write_resource(
+			g_dm_client,
+			ARTIK_LWM2M_URI_FIRMWARE_STATE,
+			(unsigned char*)ARTIK_LWM2M_FIRMWARE_STATE_IDLE,
+			strlen(ARTIK_LWM2M_FIRMWARE_STATE_IDLE));
+		artik_release_api_module(lwm2m);
+		artik_release_api_module(http);
+		close(g_dm_info->fd);
+		return 1;
+	}
+
+	lwm2m->client_write_resource(
+		g_dm_client,
+		ARTIK_LWM2M_URI_FIRMWARE_UPDATE_RES,
+		(unsigned char*)ARTIK_LWM2M_FIRMWARE_UPD_RES_SUCCESS,
+		strlen(ARTIK_LWM2M_FIRMWARE_UPD_RES_SUCCESS));
+
+	lwm2m->client_write_resource(
+		g_dm_client,
+		ARTIK_LWM2M_URI_FIRMWARE_STATE,
+		(unsigned char*)ARTIK_LWM2M_FIRMWARE_STATE_DOWNLOADED,
+		strlen(ARTIK_LWM2M_FIRMWARE_STATE_DOWNLOADED));
+	artik_release_api_module(lwm2m);
+	artik_release_api_module(http);
+	close(g_dm_info->fd);
+	return 0;
 }
 
 static void dm_on_changed_resource(void *data, void *user_data)
 {
-	char *uri = (char *)data;
+	artik_lwm2m_resource_t *res = (artik_lwm2m_resource_t *)data;
 
-	fprintf(stderr, "LWM2M resource changed: %s\n", uri);
+	fprintf(stderr, "LWM2M resource changed: %s\n", res->uri);
+	if (!strncmp(res->uri, ARTIK_LWM2M_URI_FIRMWARE_PACKAGE_URI, ARTIK_LWM2M_URI_LEN)) {
+		artik_lwm2m_module *lwm2m = NULL;
+		char *firmware_uri;
+		char *argv[2] = { NULL };
+
+		lwm2m = (artik_lwm2m_module *)artik_request_api_module("lwm2m");
+		if (!lwm2m) {
+			fprintf(stderr, "Failed to request LWM2M module\n");
+			return;
+		}
+
+		/* Intialize attribute "Update Result" */
+		lwm2m->client_write_resource(
+				g_dm_client,
+				ARTIK_LWM2M_URI_FIRMWARE_UPDATE_RES,
+				(unsigned char*)ARTIK_LWM2M_FIRMWARE_UPD_RES_DEFAULT,
+				strlen(ARTIK_LWM2M_FIRMWARE_UPD_RES_DEFAULT));
+
+		/* Change attribute "State" to "Downloading" */
+		lwm2m->client_write_resource(
+				g_dm_client,
+				ARTIK_LWM2M_URI_FIRMWARE_STATE,
+				(unsigned char*)ARTIK_LWM2M_FIRMWARE_STATE_DOWNLOADING,
+				strlen(ARTIK_LWM2M_FIRMWARE_STATE_DOWNLOADING));
+
+		/* The FW URI is empty, come back to IDLE */
+		if (res->length == 0) {
+			lwm2m->client_write_resource(
+				g_dm_client,
+				ARTIK_LWM2M_URI_FIRMWARE_STATE,
+				(unsigned char*)ARTIK_LWM2M_FIRMWARE_STATE_IDLE,
+				strlen(ARTIK_LWM2M_FIRMWARE_STATE_IDLE));
+			return;
+		}
+
+
+		/* The FW URI is not valid */
+		if (res->length > 255) {
+			fprintf(stderr, "ERROR: Unable to retreive firmware package uri\n");
+
+			lwm2m->client_write_resource(
+				g_dm_client,
+				ARTIK_LWM2M_URI_FIRMWARE_UPDATE_RES,
+				(unsigned char*)ARTIK_LWM2M_FIRMWARE_UPD_RES_URI_ERR,
+				strlen(ARTIK_LWM2M_FIRMWARE_UPD_RES_URI_ERR));
+
+			lwm2m->client_write_resource(
+				g_dm_client,
+				ARTIK_LWM2M_URI_FIRMWARE_STATE,
+				(unsigned char*)ARTIK_LWM2M_FIRMWARE_STATE_IDLE,
+				strlen(ARTIK_LWM2M_FIRMWARE_STATE_IDLE));
+
+			return;
+		}
+
+		firmware_uri = strndup((char*)res->buffer, res->length);
+		fprintf(stdout, "Downloading firmware from %s\n", firmware_uri);
+		argv[0] = firmware_uri;
+		task_create("download-firmware", SCHED_PRIORITY_DEFAULT, 16384, download_firmware, argv);
+		artik_release_api_module(lwm2m);
+	}
 }
 
 static int dm_command(int argc, char *argv[])
@@ -400,7 +609,16 @@ static int dm_command(int argc, char *argv[])
 			ret = -1;
 			goto exit;
 		}
-
+		g_dm_config->objects[ARTIK_LWM2M_OBJECT_FIRMWARE] = lwm2m->create_firmware_object(
+			false,
+			"Artik/TizenRT",
+			OTA_FIRMWARE_VERSION);
+		if (!g_dm_config->objects[ARTIK_LWM2M_OBJECT_FIRMWARE])
+		{
+			fprintf(stderr, "Failed to allocate memory for object firmware.");
+			ret = -1;
+			goto exit;
+		}
 		ret = lwm2m->client_connect(&g_dm_client, g_dm_config);
 		if (ret != S_OK) {
 			fprintf(stderr, "Failed to connect to the DM server (%d)\n", ret);
@@ -481,7 +699,31 @@ static int dm_command(int argc, char *argv[])
 			ret = -1;
 			goto exit;
 		}
+	} else if (!strcmp(argv[3], "otaend")) {
+		if (!g_dm_client) {
+			fprintf(stderr, "DM Client is not started\n");
+			ret = -1;
+			goto exit;
+		}
 
+		lwm2m = (artik_lwm2m_module *)artik_request_api_module("lwm2m");
+		if (!lwm2m) FAIL_AND_EXIT("Failed to request lwm2m module\n")
+
+		lwm2m->client_write_resource(
+			g_dm_client,
+			ARTIK_LWM2M_URI_FIRMWARE_UPDATE_RES,
+			(unsigned char*)ARTIK_LWM2M_FIRMWARE_UPD_RES_SUCCESS,
+			strlen(ARTIK_LWM2M_FIRMWARE_UPD_RES_SUCCESS));
+		lwm2m->client_write_resource(
+			g_dm_client,
+			ARTIK_LWM2M_URI_FIRMWARE_STATE,
+			(unsigned char*)ARTIK_LWM2M_FIRMWARE_STATE_IDLE,
+			strlen(ARTIK_LWM2M_FIRMWARE_STATE_IDLE));
+		lwm2m->client_write_resource(
+			g_dm_client,
+			ARTIK_LWM2M_URI_DEVICE_FW_VERSION,
+			(unsigned char*)OTA_FIRMWARE_VERSION,
+			strlen(OTA_FIRMWARE_VERSION));
 	} else {
 		fprintf(stdout, "Unknown command: dm %s\n", argv[3]);
 		usage(argv[1], cloud_commands);

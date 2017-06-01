@@ -61,6 +61,7 @@ static void set_led_state(bool state)
 static pthread_addr_t wifi_onboarding_start(pthread_addr_t arg)
 {
     StartCloudWebsocket(false);
+    StartLwm2m(false);
 
     if (StartSoftAP(true) != S_OK) {
         return NULL;
@@ -168,6 +169,8 @@ static pthread_addr_t websocket_start_cb(void *arg)
         return NULL;
     }
 
+    printf("Start websocket to ARTIK Cloud\n");
+
     ret = cloud->websocket_open_stream(&g_ws_handle, cloud_config.device_token,
             cloud_config.device_id, cloud_secure_dt);
     if (ret != S_OK) {
@@ -239,6 +242,7 @@ artik_error StartCloudWebsocket(bool start)
 
         pthread_setname_np(tid, "cloud-websocket");
         pthread_join(tid, NULL);
+        pthread_attr_destroy(&attr);
     } else {
         static pthread_t tid;
         pthread_attr_t attr;
@@ -254,12 +258,15 @@ artik_error StartCloudWebsocket(bool start)
         sparam.sched_priority = 100;
         status = pthread_attr_setschedparam(&attr, &sparam);
         status = pthread_attr_setschedpolicy(&attr, SCHED_RR);
-        status = pthread_attr_setstacksize(&attr, 1024 * 8);
+        status = pthread_attr_setstacksize(&attr, 1024 * 4);
         status = pthread_create(&tid, &attr, websocket_stop_cb, NULL);
         if (status) {
             printf("Failed to create thread for closing websocket\n");
             goto exit;
         }
+
+        pthread_join(tid, NULL);
+        pthread_attr_destroy(&attr);
     }
 
 exit:
@@ -381,6 +388,7 @@ bool ValidateCloudDevice(void)
     }
 
     pthread_join(tid, (void**)&res);
+    pthread_attr_destroy(&attr);
 
 exit:
     return (res != 0);
@@ -512,12 +520,13 @@ int StartSDRRegistration(char **resp)
     sparam.sched_priority = 100;
     status = pthread_attr_setschedparam(&attr, &sparam);
     status = pthread_attr_setschedpolicy(&attr, SCHED_RR);
-    status = pthread_attr_setstacksize(&attr, 1024 * 8);
+    status = pthread_attr_setstacksize(&attr, 1024 * 4);
     status = pthread_create(&tid, &attr, start_sdr_registration_cb, (void *)resp);
     if (status)
         goto exit;
 
     pthread_join(tid, (void**)&status);
+    pthread_attr_destroy(&attr);
 
 exit:
     return status;
@@ -621,12 +630,13 @@ int CompleteSDRRegistration(char **resp)
     sparam.sched_priority = 100;
     status = pthread_attr_setschedparam(&attr, &sparam);
     status = pthread_attr_setschedpolicy(&attr, SCHED_RR);
-    status = pthread_attr_setstacksize(&attr, 1024 * 8);
+    status = pthread_attr_setstacksize(&attr, 1024 * 4);
     status = pthread_create(&tid, &attr, complete_sdr_registration_cb, (void *)resp);
     if (status)
         goto exit;
 
     pthread_join(tid, (void**)&status);
+    pthread_attr_destroy(&attr);
 
 exit:
     return status;
