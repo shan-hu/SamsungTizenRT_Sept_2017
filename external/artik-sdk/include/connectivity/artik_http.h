@@ -64,6 +64,15 @@ extern "C" {
 		artik_http_header_field *fields;
 	} artik_http_headers;
 
+	/*!
+	 *  \brief Stream data callback prototype
+	 *
+	 *  \param[in] data Received data
+	 *  \param[in] len Length of the received data
+	 *  \param[in] user_data The user data passed from the callback function
+	 */
+	typedef int (*artik_http_stream_callback)(char *data, unsigned int len, void *user_data);
+
 	/*! \struct artik_http_module
 	 *
 	 *  \brief HTTP module operations
@@ -72,6 +81,24 @@ extern "C" {
 	 *  by the module to perform HTTP requests
 	 */
 	typedef struct {
+		/*!
+		 *  \brief Perform a GET request on streaming data
+		 *
+		 *  \param[in] url URL to request
+		 *  \param[in] headers Pointer to the structure object containing the HTTP headers to send
+		 *  \param[out] status Pointer to the status filled up by the function with the server's
+		 *          response status
+		 *  \param[in] callback Function called upon receiving new data from the stream
+		 *  \param[in] user_data Pointer to user data that will be passed as a parameter
+		 *          to the callback function
+		 *  \param[in] ssl SSL configuration to use when targeting https urls. Can be NULL.
+		 *
+		 *  \return S_OK on success, error code otherwise
+		 */
+		artik_error (*get_stream) (const char *url, artik_http_headers *headers,
+					   int *status,
+					   artik_http_stream_callback callback, void *user_data,
+					   artik_ssl_config *ssl);
 		/*!
 		 *  \brief Perform a GET request
 		 *

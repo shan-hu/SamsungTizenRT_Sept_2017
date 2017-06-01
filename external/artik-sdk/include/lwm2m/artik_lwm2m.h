@@ -24,6 +24,56 @@ extern "C" {
  *  \example lwm2m_test/artik_lwm2m_test_common.h
  */
 
+#define ARTIK_LWM2M_URI_LEN 16
+
+#define ARTIK_LWM2M_URI_DEVICE                 "/3/0"
+#define ARTIK_LWM2M_URI_DEVICE_MANUFACTURER    ARTIK_LWM2M_URI_DEVICE"/0"
+#define ARTIK_LWM2M_URI_DEVICE_MODEL_NUM       ARTIK_LWM2M_URI_DEVICE"/1"
+#define ARTIK_LWM2M_URI_DEVICE_SERIAL_NUM      ARTIK_LWM2M_URI_DEVICE"/2"
+#define ARTIK_LWM2M_URI_DEVICE_FW_VERSION      ARTIK_LWM2M_URI_DEVICE"/3"
+#define ARTIK_LWM2M_URI_DEVICE_REBOOT          ARTIK_LWM2M_URI_DEVICE"/4"
+#define ARTIK_LWM2M_URI_DEVICE_FACTORY_RESET   ARTIK_LWM2M_URI_DEVICE"/5"
+#define ARTIK_LWM2M_URI_DEVICE_POWER_SOURCES   ARTIK_LWM2M_URI_DEVICE"/6"
+#define ARTIK_LWM2M_URI_DEVICE_POWER_VOLTAGE   ARTIK_LWM2M_URI_DEVICE"/7"
+#define ARTIK_LWM2M_URI_DEVICE_POWER_CURRENT   ARTIK_LWM2M_URI_DEVICE"/8"
+#define ARTIK_LWM2M_URI_DEVICE_BATT_LEVEL      ARTIK_LWM2M_URI_DEVICE"/9"
+#define ARTIK_LWM2M_URI_DEVICE_MEMORY_FREE     ARTIK_LWM2M_URI_DEVICE"/10"
+#define ARTIK_LWM2M_URI_DEVICE_ERROR_CODE      ARTIK_LWM2M_URI_DEVICE"/11"
+#define ARTIK_LWM2M_URI_DEVICE_RESET_ERR_CODE  ARTIK_LWM2M_URI_DEVICE"/12"
+#define ARTIK_LWM2M_URI_DEVICE_CURRENT_TIME    ARTIK_LWM2M_URI_DEVICE"/13"
+#define ARTIK_LWM2M_URI_DEVICE_UTC_OFFSET      ARTIK_LWM2M_URI_DEVICE"/14"
+#define ARTIK_LWM2M_URI_DEVICE_TIMEZONE        ARTIK_LWM2M_URI_DEVICE"/15"
+#define ARTIK_LWM2M_URI_DEVICE_SUPP_BIND_MODES ARTIK_LWM2M_URI_DEVICE"/16"
+#define ARTIK_LWM2M_URI_DEVICE_DEVICE_TYPE     ARTIK_LWM2M_URI_DEVICE"/17"
+#define ARTIK_LWM2M_URI_DEVICE_HW_VERSION      ARTIK_LWM2M_URI_DEVICE"/18"
+#define ARTIK_LWM2M_URI_DEVICE_SW_VERSION      ARTIK_LWM2M_URI_DEVICE"/19"
+#define ARTIK_LWM2M_URI_DEVICE_BATT_STATUS     ARTIK_LWM2M_URI_DEVICE"/20"
+#define ARTIK_LWM2M_URI_DEVICE_MEMORY_TOTAL    ARTIK_LWM2M_URI_DEVICE"/21"
+
+#define ARTIK_LWM2M_URI_FIRMWARE               "/5/0"
+#define ARTIK_LWM2M_URI_FIRMWARE_PACKAGE       ARTIK_LWM2M_URI_FIRMWARE"/0"
+#define ARTIK_LWM2M_URI_FIRMWARE_PACKAGE_URI   ARTIK_LWM2M_URI_FIRMWARE"/1"
+#define ARTIK_LWM2M_URI_FIRMWARE_UPDATE        ARTIK_LWM2M_URI_FIRMWARE"/2"
+#define ARTIK_LWM2M_URI_FIRMWARE_STATE         ARTIK_LWM2M_URI_FIRMWARE"/3"
+#define ARTIK_LWM2M_URI_FIRMWARE_UPD_SUPP_OBJ  ARTIK_LWM2M_URI_FIRMWARE"/4"
+#define ARTIK_LWM2M_URI_FIRMWARE_UPDATE_RES    ARTIK_LWM2M_URI_FIRMWARE"/5"
+#define ARTIK_LWM2M_URI_FIRMWARE_PKG_NAME      ARTIK_LWM2M_URI_FIRMWARE"/6"
+#define ARTIK_LWM2M_URI_FIRMWARE_PKG_URI       ARTIK_LWM2M_URI_FIRMWARE"/7"
+
+#define ARTIK_LWM2M_FIRMWARE_UPD_RES_DEFAULT   "0"
+#define ARTIK_LWM2M_FIRMWARE_UPD_RES_SUCCESS   "1"
+#define ARTIK_LWM2M_FIRMWARE_UPD_RES_SPACE_ERR "2"
+#define ARTIK_LWM2M_FIRMWARE_UPD_RES_OOM       "3"
+#define ARTIK_LWM2M_FIRMWARE_UPD_RES_CONNE_ERR "4"
+#define ARTIK_LWM2M_FIRMWARE_UPD_RES_CRC_ERR   "5"
+#define ARTIK_LWM2M_FIRMWARE_UPD_RES_PKG_ERR   "6"
+#define ARTIK_LWM2M_FIRMWARE_UPD_RES_URI_ERR   "7"
+
+#define ARTIK_LWM2M_FIRMWARE_STATE_IDLE        "0"
+#define ARTIK_LWM2M_FIRMWARE_STATE_DOWNLOADING "1"
+#define ARTIK_LWM2M_FIRMWARE_STATE_DOWNLOADED  "2"
+#define ARTIK_LWM2M_FIRMWARE_STATE_UPDATING    "3"
+
 /*!
  *	\brief This enum defines the types of supported LWM2M objects
  */
@@ -57,6 +107,12 @@ typedef struct {
 	artik_lwm2m_object_type_t type;
 	artik_lwm2m_object_content_t *content;
 } artik_lwm2m_object;
+
+typedef struct {
+    char *uri;
+    unsigned char *buffer;
+    int length;
+} artik_lwm2m_resource_t;
 
 /*!
  * \brief LWM2M Handle type
@@ -235,7 +291,24 @@ typedef struct {
 			int power_volt, int power_current, int battery_level, int memory_total,
 			int memory_free, const char *time_zone, const char *utc_offset,
 			const char *binding);
-
+	/*!
+	 * \brief Create a LWM2M "Firmware" object to be exposed by the client, and
+	 * initialize it with default values.
+	 *
+	 * Details about the LWM2M Device object resources can be found
+	 * <a href="http://dev_devtoolkit.openmobilealliance.org/IoT/LWM2M10/doc/TS/index.html#!Documents/lwm2mobjectdevice.htm">
+	 *     here
+	 * </a>
+	 *
+	 * \param[in] supported Update supported objects
+	 * \param[in] pkg_name Package name
+	 * \param[in] pkg_version Package version
+	 *
+	 * \return pointer to the newly created object. When this object is no longer used,
+	 * it must be released by calling \ref free_object.
+	 */
+	artik_lwm2m_object *(*create_firmware_object)(bool supported, char *pkg_name,
+			char *pkg_version);
 	/*!
 	 * \brief Create a LWM2M "Connectivity monitoring" object connectivity monitoring to be exposed by the client, and
 	 * initialize it with default values.

@@ -28,6 +28,10 @@
 #include <artik_wifi.h>
 #endif
 
+#ifdef CONFIG_ARTIK_SDK_LWM2M
+#include <artik_lwm2m.h>
+#endif
+
 /* List of modules available for the platform */
 static const artik_api_module artik_api_a05x_modules[] = {
 #ifdef CONFIG_ARTIK_SDK_SYSTEMIO
@@ -47,6 +51,9 @@ static const artik_api_module artik_api_a05x_modules[] = {
 #endif
 #ifdef CONFIG_ARTIK_SDK_WIFI
 	{ ARTIK_MODULE_WIFI,        (char *)"wifi",     (char *)&wifi_module},
+#endif
+#ifdef CONFIG_ARTIK_SDK_LWM2M
+	{ ARTIK_MODULE_LWM2M,       (char *)"lwm2m",    (char *)&lwm2m_module},
 #endif
 	{ (artik_module_id_t)-1,	NULL,				(char *)NULL},
 };
@@ -80,10 +87,10 @@ static const artik_api_module artik_api_a05x_modules[] = {
 #define ARTIK_A053_XGPIO25	54	// GPG3[1]
 #define ARTIK_A053_XGPIO26	55	// GPG3[2]
 #define ARTIK_A053_XGPIO27	56	// GPG3[3]
-
+#define ARTIK_A053_XGPIO28	20	// GPP2[4]
 #define ARTIK_A053_XEINT0	57	// GPA0[0]
-#define ARTIK_A053_XEINT1	59	// GPA0[1]
-#define ARTIK_A053_XEINT2	58	// GPA0[2]
+#define ARTIK_A053_XEINT1	58	// GPA0[1]
+#define ARTIK_A053_XEINT2	59	// GPA0[2]
 
 /* List of available PWM pin IDs */
 #define ARTIK_A053_XPWMOUT0 0
