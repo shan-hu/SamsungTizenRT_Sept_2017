@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <shell/tash.h>
 
 #include <artik_module.h>
 #include <artik_gpio.h>
@@ -85,11 +86,30 @@ static int gpio_write(int argc, char *argv[])
 	return gpio_io(GPIO_IN, atoi(argv[3]), atoi(argv[4]));
 }
 
-#ifdef CONFIG_BUILD_KERNEL
-int main(int argc, FAR char *argv[])
-#else
 int gpio_main(int argc, char *argv[])
-#endif
 {
 	return commands_parser(argc, argv, gpio_commands);
 }
+
+#ifdef CONFIG_EXAMPLES_ARTIK_GPIO
+static tash_cmdlist_t gpio_cmds[] = {
+    {"gpio", gpio_main, TASH_EXECMD_SYNC},
+    {NULL, NULL, 0}
+};
+
+
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
+int artik_gpio_main(int argc, char *argv[])
+#endif
+{
+#ifdef CONFIG_TASH
+    /* add tash command */
+    tash_cmdlist_install(gpio_cmds);
+#endif
+
+    return 0;
+}
+#endif
+

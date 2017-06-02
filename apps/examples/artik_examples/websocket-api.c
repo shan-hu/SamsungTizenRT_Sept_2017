@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <shell/tash.h>
 
 #include <artik_module.h>
 #include <artik_websocket.h>
@@ -121,11 +122,35 @@ static int websocket_send(int argc, char *argv[])
     return 0;
 }
 
-#ifdef CONFIG_BUILD_KERNEL
-int main(int argc, FAR char *argv[])
-#else
 int ws_main(int argc, char *argv[])
-#endif
 {
 	return commands_parser(argc, argv, websocket_commands);
 }
+
+#ifdef CONFIG_EXAMPLES_ARTIK_WEBSOCKET
+
+void StartWifiConnection(void);
+
+static tash_cmdlist_t ws_cmds[] = {
+    {"websocket", ws_main, TASH_EXECMD_SYNC},
+    {NULL, NULL, 0}
+};
+
+
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
+int artik_websocket_main(int argc, char *argv[])
+#endif
+{
+#ifdef CONFIG_TASH
+    /* add tash command */
+    tash_cmdlist_install(ws_cmds);
+#endif
+
+    StartWifiConnection();
+
+    return 0;
+}
+#endif
+

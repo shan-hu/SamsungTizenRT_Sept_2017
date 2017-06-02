@@ -2,7 +2,7 @@
 -include $(TOPDIR)/Make.defs
 include $(APPDIR)/Make.defs
 
-APPNAME = artik_onboarding
+APPNAME = artik_examples
 PRIORITY = SCHED_PRIORITY_DEFAULT
 STACKSIZE = 2048
 ASRCS =
@@ -17,12 +17,48 @@ CFLAGS += -I$(ARTIK_SDK_DIR)/include/lwm2m
 CFLAGS += -I$(TOPDIR)/net
 CFLAGS += -I$(APPDIR)/include
 CFLAGS += -I$(APPDIR)/include/netutils
-CSRCS += artik_onboarding_rest.c
-CSRCS += artik_onboarding_cloud.c
-CSRCS += artik_onboarding_wifi.c
-CSRCS += artik_onboarding_config.c
-CSRCS += artik_onboarding_lwm2m.c
-MAINSRC = artik_onboarding.c
+CSRCS += command.c
+CSRCS += wifi-auto.c
+
+ifeq ($(CONFIG_EXAMPLES_ARTIK_ADC),y)
+  MAINSRC += adc-api.c
+endif
+ifeq ($(CONFIG_EXAMPLES_ARTIK_CLOUD), y)
+  MAINSRC += cloud-api.c
+endif
+ifeq ($(CONFIG_EXAMPLES_ARTIK_GPIO), y)
+  MAINSRC += gpio-api.c
+endif
+ifeq ($(CONFIG_EXAMPLES_ARTIK_HTTP), y)
+  MAINSRC += http-api.c
+endif
+ifeq ($(CONFIG_EXAMPLES_ARTIK_MODULE), y)
+  MAINSRC += module-api.c
+endif
+ifeq ($(CONFIG_EXAMPLES_ARTIK_PWM), y)
+  MAINSRC += pwm-api.c
+endif
+ifeq ($(CONFIG_EXAMPLES_ARTIK_SECURITY), y)
+  MAINSRC += security-api.c
+endif
+ifeq ($(CONFIG_EXAMPLES_ARTIK_WEBSOCKET), y)
+  MAINSRC += websocket-api.c
+endif
+ifeq ($(CONFIG_EXAMPLES_ARTIK_WIFI), y)
+  MAINSRC += wifi-api.c
+endif
+ifeq ($(CONFIG_EXAMPLES_ARTIK_ALL_EXAMPLES), y)
+  CSRCS += adc-api.c
+  CSRCS += cloud-api.c
+  CSRCS += gpio-api.c
+  CSRCS += http-api.c
+  CSRCS += module-api.c
+  CSRCS += pwm-api.c
+  CSRCS += security-api.c
+  CSRCS += websocket-api.c
+  CSRCS += wifi-api.c
+  MAINSRC += examples-api.c
+endif
 
 AOBJS = $(ASRCS:.S=$(OBJEXT))
 COBJS = $(CSRCS:.c=$(OBJEXT))
@@ -52,7 +88,7 @@ else
 endif
 
 # Common build
-VPATH = 
+VPATH =
 
 all: .built
 .PHONY: clean depend distclean

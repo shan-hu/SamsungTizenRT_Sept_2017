@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <shell/tash.h>
 
 #include <artik_module.h>
 #include <artik_security.h>
@@ -256,11 +257,30 @@ exit:
 	return ret;
 }
 
-#ifdef CONFIG_BUILD_KERNEL
-int main(int argc, FAR char *argv[])
-#else
 int see_main(int argc, char *argv[])
-#endif
 {
 	return commands_parser(argc, argv, security_commands);
 }
+
+#ifdef CONFIG_EXAMPLES_ARTIK_SECURITY
+static tash_cmdlist_t see_cmds[] = {
+    {"see", see_main, TASH_EXECMD_SYNC},
+    {NULL, NULL, 0}
+};
+
+
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
+int artik_see_main(int argc, char *argv[])
+#endif
+{
+#ifdef CONFIG_TASH
+    /* add tash command */
+    tash_cmdlist_install(see_cmds);
+#endif
+
+    return 0;
+}
+#endif
+

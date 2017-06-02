@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/boardctl.h>
+#include <shell/tash.h>
 
 #include <artik_module.h>
 #include <artik_cloud.h>
@@ -380,16 +381,6 @@ static void dm_on_execute_resource(void *data, void *user_data)
 		int fd =  open("/dev/mtdblock7", O_RDWR);
 		write(fd, g_dm_info->header, OTA_FIRMWARE_HEADER_SIZE);
 		close(fd);
-/*		lwm2m->client_write_resource(
-			g_dm_client,
-			ARTIK_LWM2M_URI_FIRMWARE_UPDATE_RES,
-			(unsigned char*)ARTIK_LWM2M_FIRMWARE_UPD_RES_SUCCESS,
-			strlen(ARTIK_LWM2M_FIRMWARE_UPD_RES_SUCCESS));
-		lwm2m->client_write_resource(
-			g_dm_client,
-			ARTIK_LWM2M_URI_FIRMWARE_STATE,
-			(unsigned char*)ARTIK_LWM2M_FIRMWARE_STATE_IDLE,
-			strlen(ARTIK_LWM2M_FIRMWARE_STATE_IDLE));*/
 		reboot();
 	}
 }
@@ -738,11 +729,33 @@ exit:
 	return ret;
 }
 
-#ifdef CONFIG_BUILD_KERNEL
-int main(int argc, FAR char *argv[])
-#else
 int cloud_main(int argc, char *argv[])
-#endif
 {
 	return commands_parser(argc, argv, cloud_commands);
 }
+
+#ifdef CONFIG_EXAMPLES_ARTIK_CLOUD
+
+void StartWifiConnection(void);
+
+static tash_cmdlist_t cloud_cmds[] = {
+    {"cloud", cloud_main, TASH_EXECMD_SYNC},
+    {NULL, NULL, 0}
+};
+
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
+int artik_cloud_main(int argc, char *argv[])
+#endif
+{
+#ifdef CONFIG_TASH
+    /* add tash command */
+    tash_cmdlist_install(cloud_cmds);
+#endif
+
+    StartWifiConnection();
+    return 0;
+}
+#endif
+

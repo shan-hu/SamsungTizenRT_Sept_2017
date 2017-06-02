@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <shell/tash.h>
 
 #include <artik_module.h>
 #include <artik_http.h>
@@ -168,11 +169,34 @@ exit:
 	return (ret == S_OK);
 }
 
-#ifdef CONFIG_BUILD_KERNEL
-int main(int argc, FAR char *argv[])
-#else
 int http_main(int argc, char *argv[])
-#endif
 {
 	return commands_parser(argc, argv, http_commands);
 }
+
+#ifdef CONFIG_EXAMPLES_ARTIK_HTTP
+
+void StartWifiConnection(void);
+
+static tash_cmdlist_t http_cmds[] = {
+    {"http", http_main, TASH_EXECMD_SYNC},
+    {NULL, NULL, 0}
+};
+
+
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
+int artik_http_main(int argc, char *argv[])
+#endif
+{
+#ifdef CONFIG_TASH
+    /* add tash command */
+    tash_cmdlist_install(http_cmds);
+#endif
+
+    StartWifiConnection();
+    return 0;
+}
+#endif
+

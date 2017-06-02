@@ -132,6 +132,7 @@ exit:
     return ret;
 }
 
+#ifdef CONFIG_EXAMPLES_ARTIK_ALL_EXAMPLES
 extern int module_main(int argc, char *argv[]);
 extern int cloud_main(int argc, char *argv[]);
 extern int gpio_main(int argc, char *argv[]);
@@ -141,9 +142,12 @@ extern int http_main(int argc, char *argv[]);
 extern int wifi_main(int argc, char *argv[]);
 extern int ws_main(int argc, char *argv[]);
 extern int see_main(int argc, char *argv[]);
+#endif
+
 extern int ntpclient_main(int argc, char *argv[]);
 
 static tash_cmdlist_t atk_cmds[] = {
+#ifdef CONFIG_EXAMPLES_ARTIK_ALL_EXAMPLES
     {"sdk", module_main, TASH_EXECMD_SYNC},
     {"gpio", gpio_main, TASH_EXECMD_SYNC},
     {"pwm", pwm_main, TASH_EXECMD_SYNC},
@@ -153,6 +157,7 @@ static tash_cmdlist_t atk_cmds[] = {
     {"wifi", wifi_main, TASH_EXECMD_SYNC},
     {"websocket", ws_main, TASH_EXECMD_SYNC},
     {"see", see_main, TASH_EXECMD_SYNC},
+#endif
     {"onboard", onboard_main, TASH_EXECMD_SYNC},
     {"ntp", ntpclient_main, TASH_EXECMD_SYNC},
     {NULL, NULL, 0}

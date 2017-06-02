@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <shell/tash.h>
 
 #include <artik_module.h>
 
@@ -82,11 +83,30 @@ exit:
 }
 
 
-#ifdef CONFIG_BUILD_KERNEL
-int main(int argc, FAR char *argv[])
-#else
 int module_main(int argc, char *argv[])
-#endif
 {
 	return commands_parser(argc, argv, module_commands);
 }
+
+#ifdef CONFIG_EXAMPLES_ARTIK_MODULE
+static tash_cmdlist_t module_cmds[] = {
+    {"sdk", module_main, TASH_EXECMD_SYNC},
+    {NULL, NULL, 0}
+};
+
+
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
+int artik_module_main(int argc, char *argv[])
+#endif
+{
+#ifdef CONFIG_TASH
+    /* add tash command */
+    tash_cmdlist_install(module_cmds);
+#endif
+
+    return 0;
+}
+#endif
+

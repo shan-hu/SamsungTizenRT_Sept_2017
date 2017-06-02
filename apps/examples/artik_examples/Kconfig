@@ -1,0 +1,64 @@
+#
+# For a description of the syntax of this configuration file,
+# see kconfig-language at https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt
+#
+menuconfig EXAMPLES_ARTIK_SDK
+	bool "ARTIK SDK examples"
+	default n
+
+if EXAMPLES_ARTIK_SDK
+choice
+	prompt "Examples SDK"
+	config EXAMPLES_ARTIK_ADC
+		bool "ARTIK ADC example"
+		depends on ARTIK_SDK_SYSTEMIO
+	config EXAMPLES_ARTIK_CLOUD
+		bool "ARTIK Cloud example"
+		depends on ARTIK_SDK_WIFI
+		depends on ARTIK_SDK_CONNECTIVITY
+	config EXAMPLES_ARTIK_GPIO
+		bool "ARTIK GPIO example"
+		depends on ARTIK_SDK_SYSTEMIO
+	config EXAMPLES_ARTIK_HTTP
+		bool "ARTIK HTTP example"
+		depends on ARTIK_SDK_WIFI
+		depends on ARTIK_SDK_CONNECTIVITY
+	config EXAMPLES_ARTIK_MODULE
+		bool "ARTIK Module example"
+		depends on ARTIK_SDK
+	config EXAMPLES_ARTIK_PWM
+		bool "ARTIK PWM example"
+		depends on ARTIK_SDK
+		depends on ARTIK_SDK_SYSTEMIO
+	config EXAMPLES_ARTIK_SECURITY
+		bool "ARTIK Security example"
+		depends on ARTIK_SDK_CONNECTIVITY
+	config EXAMPLES_ARTIK_WEBSOCKET
+		bool "ARTIK Websocket example"
+		depends on ARTIK_SDK_WIFI
+		depends on ARTIK_SDK_CONNECTIVITY
+	config EXAMPLES_ARTIK_WIFI
+		bool "ARTIK WiFi example"
+		depends on ARTIK_SDK_WIFI
+		depends on ARTIK_SDK_CONNECTIVITY
+	config EXAMPLES_ARTIK_ALL_EXAMPLES
+		bool "ARTIK enable all examples"
+		depends on ARTIK_SDK_CONNECTIVITY
+		depends on ARTIK_SDK_SYSTEMIO
+		depends on ARTIK_SDK_WIFI
+		default y
+endchoice
+endif
+
+config USER_ENTRYPOINT
+	string
+	default "artik_adc_main" if ENTRY_ARTIK_EXAMPLES && EXAMPLES_ARTIK_ADC
+	default "artik_cloud_main" if ENTRY_ARTIK_EXAMPLES && EXAMPLES_ARTIK_CLOUD
+	default "artik_gpio_main" if ENTRY_ARTIK_EXAMPLES && EXAMPLES_ARTIK_GPIO
+	default "artik_http_main" if ENTRY_ARTIK_EXAMPLES && EXAMPLES_ARTIK_HTTP
+	default "artik_module_main" if ENTRY_ARTIK_EXAMPLES && EXAMPLES_ARTIK_MODULE
+	default "artik_pwm_main" if ENTRY_ARTIK_EXAMPLES && EXAMPLES_ARTIK_PWM
+	default "artik_see_main" if ENTRY_ARTIK_EXAMPLES && EXAMPLES_ARTIK_SECURITY
+	default "artik_websocket_main" if ENTRY_ARTIK_EXAMPLES && EXAMPLES_ARTIK_WEBSOCKET
+	default "artik_wifi_main" if ENTRY_ARTIK_EXAMPLES && EXAMPLES_ARTIK_WIFI
+	default "artik_examples_main" if ENTRY_ARTIK_EXAMPLES && EXAMPLES_ARTIK_ALL_EXAMPLES

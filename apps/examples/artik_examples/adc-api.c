@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <shell/tash.h>
+
 #include <artik_module.h>
 #include <artik_error.h>
 #include <artik_adc.h>
@@ -64,11 +66,29 @@ exit:
     return ret;
 }
 
-#ifdef CONFIG_BUILD_KERNEL
-int main(int argc, FAR char *argv[])
-#else
 int adc_main(int argc, char *argv[])
-#endif
 {
     return commands_parser(argc, argv, adc_commands);
 }
+
+#ifdef CONFIG_EXAMPLES_ARTIK_ADC
+static tash_cmdlist_t adc_cmds[] = {
+    {"adc", adc_main, TASH_EXECMD_SYNC},
+    {NULL, NULL, 0}
+};
+
+
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
+int artik_adc_main(int argc, char *argv[])
+#endif
+{
+#ifdef CONFIG_TASH
+    /* add tash command */
+    tash_cmdlist_install(adc_cmds);
+#endif
+
+    return 0;
+}
+#endif

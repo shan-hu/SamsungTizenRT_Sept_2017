@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <shell/tash.h>
 
 #include <artik_module.h>
 #include <artik_pwm.h>
@@ -88,11 +89,30 @@ exit:
 	return ret;
 }
 
-#ifdef CONFIG_BUILD_KERNEL
-int main(int argc, FAR char *argv[])
-#else
 int pwm_main(int argc, char *argv[])
-#endif
 {
 	return commands_parser(argc, argv, pwm_commands);
 }
+
+#ifdef CONFIG_EXAMPLES_ARTIK_PWM
+static tash_cmdlist_t pwm_cmds[] = {
+    {"pwm", pwm_main, TASH_EXECMD_SYNC},
+    {NULL, NULL, 0}
+};
+
+
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
+int artik_pwm_main(int argc, char *argv[])
+#endif
+{
+#ifdef CONFIG_TASH
+    /* add tash command */
+    tash_cmdlist_install(pwm_cmds);
+#endif
+
+    return 0;
+}
+#endif
+

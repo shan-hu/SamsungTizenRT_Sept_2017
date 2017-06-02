@@ -2,6 +2,8 @@
 #include <string.h>
 #include <errno.h>
 
+#include <shell/tash.h>
+
 //#include <apps/netutils/dhcpc.h>
 //#include <tinyara/net/dns.h>
 
@@ -360,8 +362,6 @@ static int dhcp_command(int argc, char *argv[])
 	}
 
 	err = network->dhcp_client_start(&g_dhcp_handle, ARTIK_WIFI);
-	artik_release_api_module(g_dhcp_handle);
-
 	if (err != S_OK) {
 		fprintf(stderr, "Failed to request DHCP lease (err=%d)\n", ret);
 		ret = -1;
@@ -396,11 +396,7 @@ static void usage(void)
 	}
 }
 
-#ifdef CONFIG_BUILD_KERNEL
-int main(int argc, FAR char *argv[])
-#else
 int wifi_main(int argc, char *argv[])
-#endif
 {
 	const struct wifi_command *cmd = commands;
 
@@ -431,3 +427,26 @@ int wifi_main(int argc, char *argv[])
 
 	return 0;
 }
+
+#ifdef CONFIG_EXAMPLES_ARTIK_WIFI
+static tash_cmdlist_t wifi_cmds[] = {
+    {"wifi", wifi_main, TASH_EXECMD_SYNC},
+    {NULL, NULL, 0}
+};
+
+
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
+int artik_wifi_main(int argc, char *argv[])
+#endif
+{
+#ifdef CONFIG_TASH
+    /* add tash command */
+    tash_cmdlist_install(wifi_cmds);
+#endif
+
+    return 0;
+}
+#endif
+
