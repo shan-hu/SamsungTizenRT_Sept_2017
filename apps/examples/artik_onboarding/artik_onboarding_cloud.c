@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <artik_module.h>
 #include <artik_error.h>
 #include <artik_cloud.h>
@@ -20,17 +21,24 @@
 #define RESP_UNAVAIL_TPL    RESP_ERROR(API_ERROR_INTERNAL, "Internal Software Module error")
 #define RESP_PIN_TPL        RESP_ERROR_EXTRA(API_ERROR_OK, "none", "\"pin\":\"%s\"")
 
+#define WEBSOCKET_REGISTER_TIMEOUT  30  /* seconds */
+
 struct ArtikCloudConfig cloud_config;
 
 static artik_websocket_handle g_ws_handle = NULL;
+static sem_t g_sem_ws_registered;
+static bool g_ws_registration_result = false;
 bool cloud_secure_dt = false;
 
-void CloudResetConfig(void)
+void CloudResetConfig(bool reset_dtid)
 {
-    memset(&cloud_config, 0, sizeof(cloud_config));
     strncpy(cloud_config.device_id, "null", AKC_DID_LEN);
     strncpy(cloud_config.device_token, "null", AKC_TOKEN_LEN);
-    strncpy(cloud_config.device_type_id, AKC_DEFAULT_DTID, AKC_DTID_LEN);
+    strncpy(cloud_config.reg_id, "", AKC_REG_ID_LEN);
+    strncpy(cloud_config.reg_nonce, "", AKC_REG_NONCE_LEN);
+
+    if (reset_dtid)
+        strncpy(cloud_config.device_type_id, AKC_DEFAULT_DTID, AKC_DTID_LEN);
 }
 
 static void set_led_state(bool state)
@@ -88,7 +96,20 @@ static void cloud_websocket_rx_cb(void *user_data, void *result)
     /* Parse JSON and look for actions */
     msg = cJSON_Parse((const char *)result);
     if (!msg)
-        goto exit;
+        goto out;
+
+    /* Check for registration response */
+    data = cJSON_GetObjectItem(msg, "data");
+    if (data && (data->type == cJSON_Object)) {
+        code = cJSON_GetObjectItem(data, "code");
+        if (code && (code->type == cJSON_String)) {
+            if (!strncmp(code->valuestring, "200", strlen("200"))) {
+                g_ws_registration_result = true;
+                sem_post(&g_sem_ws_registered);
+                goto exit;
+            }
+        }
+    }
 
     /* Check if error */
     error = cJSON_GetObjectItem(msg, "error");
@@ -100,62 +121,51 @@ static void cloud_websocket_rx_cb(void *user_data, void *result)
                 printf("Websocket error %d - %s\n", code->valueint,
                         data->valuestring);
                 if (code->valueint == 404) {
-                    /*
-                     * Device no longer exists, going back
-                     * to onboarding service.
-                     */
-                    ResetConfiguration();
-                    pthread_t tid;
-                    pthread_create(&tid, NULL, wifi_onboarding_start, NULL);
-                    pthread_detach(tid);
+                    g_ws_registration_result = false;
+                    sem_post(&g_sem_ws_registered);
+                }
+                goto exit;
+            }
+        }
+    }
+
+    /* Check if we received an action */
+    type = cJSON_GetObjectItem(msg, "type");
+    if (type && (type->type == cJSON_String)) {
+        if (!strncmp(type->valuestring, "action", strlen("action"))) {
+            data = cJSON_GetObjectItem(msg, "data");
+            if (data && (data->type == cJSON_Object)) {
+                actions = cJSON_GetObjectItem(data, "actions");
+                if (actions && (actions->type == cJSON_Array)) {
+                    /* Browse through actions */
+                    for (action = (actions)->child; action != NULL; action = action->next) {
+                        cJSON *name;
+
+                        if (action->type != cJSON_Object)
+                            continue;
+
+                        name = cJSON_GetObjectItem(action, "name");
+                        if (!name || (name->type != cJSON_String))
+                            continue;
+
+                        if(!strncmp(name->valuestring, "setOn", strlen("setOn"))) {
+                            fprintf(stderr, "CLOUD ACTION: SetOn\n");
+                            SendMessageToCloud("{\"state\":true}");
+                            set_led_state(true);
+                        } else if(!strncmp(name->valuestring, "setOff", strlen("setOff"))) {
+                            fprintf(stderr, "CLOUD ACTION: SetOff\n");
+                            SendMessageToCloud("{\"state\":false}");
+                            set_led_state(false);
+                        }
+                    }
                 }
             }
         }
-
-        goto error;
     }
 
-    type = cJSON_GetObjectItem(msg, "type");
-    if (!type || (type->type != cJSON_String))
-        goto error;
-
-    if (strncmp(type->valuestring, "action", strlen("action")))
-        goto error;
-
-    data = cJSON_GetObjectItem(msg, "data");
-    if (!data || (data->type != cJSON_Object))
-        goto error;
-
-    actions = cJSON_GetObjectItem(data, "actions");
-    if (!actions || (actions->type != cJSON_Array))
-        goto error;
-
-    /* Browse through actions */
-    for (action = (actions)->child; action != NULL; action = action->next) {
-        cJSON *name;
-
-        if (action->type != cJSON_Object)
-            continue;
-
-        name = cJSON_GetObjectItem(action, "name");
-
-        if (!name || (name->type != cJSON_String))
-            continue;
-
-        if(!strncmp(name->valuestring, "setOn", strlen("setOn"))) {
-            fprintf(stderr, "CLOUD ACTION: SetOn\n");
-            SendMessageToCloud("{\"state\":true}");
-            set_led_state(true);
-        } else if(!strncmp(name->valuestring, "setOff", strlen("setOff"))) {
-            fprintf(stderr, "CLOUD ACTION: SetOff\n");
-            SendMessageToCloud("{\"state\":false}");
-            set_led_state(false);
-        }
-    }
-
-error:
-    cJSON_Delete(msg);
 exit:
+    cJSON_Delete(msg);
+out:
     free(result);
 }
 
@@ -166,6 +176,8 @@ static pthread_addr_t websocket_start_cb(void *arg)
 
     if (!cloud) {
         printf("Cloud module is not available\n");
+        ret = E_NOT_SUPPORTED;
+        pthread_exit((void *)ret);
         return NULL;
     }
 
@@ -182,6 +194,7 @@ static pthread_addr_t websocket_start_cb(void *arg)
     current_service_state = STATE_CONNECTED;
 
 exit:
+    pthread_exit((void *)ret);
     artik_release_api_module(cloud);
     return NULL;
 }
@@ -217,18 +230,24 @@ static pthread_addr_t websocket_stop_cb(void *arg)
 artik_error StartCloudWebsocket(bool start)
 {
     artik_error ret = S_OK;
+    int num_retries = 5;
 
     if (start) {
         static pthread_t tid;
         pthread_attr_t attr;
         int status;
         struct sched_param sparam;
+        struct timespec timeout;
 
         if (g_ws_handle) {
             printf("Websocket is already open, close it first\n");
             goto exit;
         }
 
+        g_ws_registration_result = false;
+        sem_init(&g_sem_ws_registered, 0, 0);
+
+retry:
         pthread_attr_init(&attr);
         sparam.sched_priority = 100;
         status = pthread_attr_setschedparam(&attr, &sparam);
@@ -236,13 +255,50 @@ artik_error StartCloudWebsocket(bool start)
         status = pthread_attr_setstacksize(&attr, 1024 * 8);
         status = pthread_create(&tid, &attr, websocket_start_cb, NULL);
         if (status) {
+            sem_destroy(&g_sem_ws_registered);
             printf("Failed to create thread for websocket\n");
+            ret = E_NO_MEM;
             goto exit;
         }
 
-        pthread_setname_np(tid, "cloud-websocket");
-        pthread_join(tid, NULL);
         pthread_attr_destroy(&attr);
+        pthread_setname_np(tid, "cloud-websocket");
+        pthread_join(tid, (void**)&ret);
+
+        if ((ret != S_OK) && num_retries--) {
+            printf("Failed to connect to websocket (%d), retrying...\n", ret);
+            goto retry;
+        }
+
+        if (num_retries < 1) {
+            sem_destroy(&g_sem_ws_registered);
+            ret = E_WEBSOCKET_ERROR;
+            goto exit;
+        }
+
+        /* Wait for registration status message */
+        clock_gettime(CLOCK_REALTIME, &timeout);
+        timeout.tv_sec += WEBSOCKET_REGISTER_TIMEOUT;
+        if (sem_timedwait(&g_sem_ws_registered, &timeout) == -1) {
+            sem_destroy(&g_sem_ws_registered);
+            StartCloudWebsocket(false);
+            printf("Failure while waiting websocket to register (err=%d)\n", errno);
+            ret = E_ACCESS_DENIED;
+            goto exit;
+        }
+
+        if (!g_ws_registration_result) {
+            sem_destroy(&g_sem_ws_registered);
+            StartCloudWebsocket(false);
+            printf("Websocket failed to register AKC device\n");
+            ret = E_ACCESS_DENIED;
+            goto exit;
+        }
+
+        sem_destroy(&g_sem_ws_registered);
+
+        printf("Websocket successfully connected\n");
+
     } else {
         static pthread_t tid;
         pthread_attr_t attr;
@@ -261,6 +317,7 @@ artik_error StartCloudWebsocket(bool start)
         status = pthread_attr_setstacksize(&attr, 1024 * 4);
         status = pthread_create(&tid, &attr, websocket_stop_cb, NULL);
         if (status) {
+            ret = E_ACCESS_DENIED;
             printf("Failed to create thread for closing websocket\n");
             goto exit;
         }
@@ -297,101 +354,6 @@ artik_error SendMessageToCloud(char *message)
 exit:
     artik_release_api_module(cloud);
     return ret;
-}
-
-static pthread_addr_t get_device_cb(void *arg)
-{
-    artik_error ret = S_OK;
-    char *response = NULL;
-    int res = 0;
-    char url[128];
-    char bearer[128];
-    artik_http_module *http = (artik_http_module *)artik_request_api_module("http");
-    artik_ssl_config ssl_config;
-    artik_http_headers headers;
-    artik_http_header_field fields[] = {
-        {"Authorization", NULL},
-        {"Content-Type", "application/json"},
-    };
-
-    if (!http) {
-        printf("HTTP module is not available\n");
-        return NULL;
-    }
-
-    headers.fields = fields;
-    headers.num_fields = sizeof(fields) / sizeof(fields[0]);
-
-    /* Build up authorization header */
-    snprintf(bearer, 128, "Bearer %s", cloud_config.device_token);
-    fields[0].data = bearer;
-
-    /* Prepare the SSL configuration and URL*/
-    memset(&ssl_config, 0, sizeof(ssl_config));
-
-    if (cloud_secure_dt) {
-        snprintf(url, 256, "https://s-api.artik.cloud/v1.1/devices/%s?properties=false",
-                cloud_config.device_id);
-        ssl_config.use_se = true;
-    } else {
-        snprintf(url, 256, "https://api.artik.cloud/v1.1/devices/%s?properties=false",
-                cloud_config.device_id);
-        ssl_config.use_se = false;
-    }
-
-    ret = http->get(url, &headers, &response, NULL, &ssl_config);
-    if (ret != S_OK) {
-        printf("Failed to call get_device secure Cloud API (err=%d)\n", ret);
-        goto exit;
-    }
-
-    if (response) {
-        cJSON *resp, *data;
-
-        /* Consider the device is valid only if "data" JSON object is returned */
-        resp = cJSON_Parse(response);
-        if (resp) {
-            data = cJSON_GetObjectItem(resp, "data");
-            if (data && (data->type == cJSON_Object))
-                res = 1;
-        }
-
-        free(response);
-    } else {
-        printf("Get device: failed to get response (%d)\n", res);
-    }
-
-exit:
-    artik_release_api_module(http);
-    pthread_exit((void *)res);
-
-    return NULL;
-}
-
-bool ValidateCloudDevice(void)
-{
-    int res = 0;
-    static pthread_t tid;
-    pthread_attr_t attr;
-    int status;
-    struct sched_param sparam;
-
-    pthread_attr_init(&attr);
-    sparam.sched_priority = 100;
-    status = pthread_attr_setschedparam(&attr, &sparam);
-    status = pthread_attr_setschedpolicy(&attr, SCHED_RR);
-    status = pthread_attr_setstacksize(&attr, 1024 * 8);
-    status = pthread_create(&tid, &attr, get_device_cb, NULL);
-    if (status) {
-        printf("Failed to create thread for validating cloud device\n");
-        goto exit;
-    }
-
-    pthread_join(tid, (void**)&res);
-    pthread_attr_destroy(&attr);
-
-exit:
-    return (res != 0);
 }
 
 static pthread_addr_t start_sdr_registration_cb(void *arg)

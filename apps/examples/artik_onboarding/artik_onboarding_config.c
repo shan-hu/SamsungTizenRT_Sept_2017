@@ -15,6 +15,7 @@ void PrintConfiguration(void)
     printf("\tssid: %s\n", wifi_config.ssid);
     printf("\tpassphrase: %s\n", wifi_config.passphrase);
     printf("\tsecure: %s\n", wifi_config.secure ? "true" : "false");
+    printf("\tNTP server: %s\n", wifi_config.ntp_server);
 
     printf("Cloud:\n");
     printf("\tdevice_id: %s\n", cloud_config.device_id);
@@ -36,7 +37,7 @@ artik_error InitConfiguration(void)
     if (st.st_size != (sizeof(wifi_config) + sizeof(cloud_config) + sizeof(lwm2m_state))) {
         printf("Invalid configuration, creating default one\n");
 
-        err = ResetConfiguration();
+        err = ResetConfiguration(true);
     } else {
 
         fd = open(config_file, O_RDONLY);
@@ -85,10 +86,10 @@ artik_error SaveConfiguration(void)
     return S_OK;
 }
 
-artik_error ResetConfiguration(void)
+artik_error ResetConfiguration(bool force)
 {
-    WifiResetConfig();
-    CloudResetConfig();
+    WifiResetConfig(force);
+    CloudResetConfig(force);
     Lwm2mResetConfig();
 
     return SaveConfiguration();

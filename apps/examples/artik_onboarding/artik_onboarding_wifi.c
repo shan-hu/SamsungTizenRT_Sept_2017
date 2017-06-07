@@ -15,14 +15,12 @@
 #include "artik_onboarding.h"
 
 #define NET_IFNAME          "wl1"
-#define SOFT_AP_IPADDR      "192.168.10.1"
-#define SOFT_AP_NETMASK     "255.255.255.0"
-#define SOFT_AP_GW          "192.168.10.1"
 #define MDNS_SVC_HOSTNAME   "_http._tcp.local"
 #define MDNS_SVC_PORT       80
 #define MDNS_SVC_TEXT       "path=/v1.0/artikcloud"
 
-#define WIFI_JOIN_TIMEOUT   30  /* seconds */
+#define WIFI_JOIN_TIMEOUT   30        /* seconds */
+#define NTP_REFRESH_PERIOD  (60 * 60) /* seconds */
 
 /*
  * Security modes below must be sorted
@@ -47,19 +45,24 @@ static uint8_t g_join_result = 0;
 static char *g_wifi_scan_results = NULL;
 static char g_ap_ssid[32] = "";
 
-static struct ntpc_server_conn_s ntp_server_conn = {
-    "0.pool.ntp.org",
-    123
+static struct ntpc_server_conn_s ntp_server_conn[] = {
+    { NULL, 123 },
 };
 
 static void ntp_link_error(void)
 {
-    printf("NTP error\n");
+    printf("NTP error: stopping client\n");
+    ntpc_stop();
 }
 
-void WifiResetConfig()
+void WifiResetConfig(bool reset_ntp)
 {
-    memset(&wifi_config, 0, sizeof(wifi_config));
+    strncpy(wifi_config.ssid, "", SSID_MAX_LEN);
+    strncpy(wifi_config.passphrase, "", PASSPHRASE_MAX_LEN);
+    wifi_config.secure = false;
+
+    if (reset_ntp)
+        strncpy(wifi_config.ntp_server, "0.pool.ntp.org", NTP_SERVER_MAX_LEN-1);
 }
 
 static void wifi_scan_callback(void *result, void *user_data)
@@ -467,7 +470,9 @@ artik_error StartStationConnection(bool start)
             goto exit;
         }
 
-        usleep(500 * 1000);
+        sleep(1);
+
+        printf("Start DHCP client\n");
 
         /* Start DHCP client to get an IP address */
         if (StartDHCPClient(true)) {
@@ -478,10 +483,24 @@ artik_error StartStationConnection(bool start)
         /* Wait a bit for the network configuration to settle */
         sleep(1);
 
+        printf("Start NTP client\n");
+
         /* Set date and time using NTP */
-        if (ntpc_start(&ntp_server_conn, 1, 60, ntp_link_error) < 0) {
-            printf("Failed to start NTP server. The date may be incorrect"
+        ntp_server_conn[0].hostname = wifi_config.ntp_server;
+        if (ntpc_start(ntp_server_conn, sizeof(ntp_server_conn)/sizeof(ntp_server_conn[0]),
+                    NTP_REFRESH_PERIOD, ntp_link_error) < 0) {
+            printf("Failed to start NTP client. The date may be incorrect"
                 " and lead to undefined behavior\n");
+        } else {
+            int num_retries = 10;
+
+            /* Wait for the date to be set */
+            while ((ntpc_get_link_status() != NTP_LINK_UP) && --num_retries)
+                sleep(2);
+
+            if (!num_retries)
+                printf("Failed to reach NTP server. The date may be incorrect"
+                    " and lead to undefined behavior\n");
         }
     } else {
 

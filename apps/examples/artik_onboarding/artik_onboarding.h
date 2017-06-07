@@ -1,7 +1,7 @@
 #ifndef _ARTIK_ONBOARDING_H_
 #define _ARTIK_ONBOARDING_H_
 
-#define ONBOARDING_VERSION "1.5.0"
+#define ONBOARDING_VERSION "1.5.2"
 
 /*
  * Service states
@@ -30,17 +30,19 @@ void Lwm2mResetConfig(void);
  */
 #define SSID_MAX_LEN            64
 #define PASSPHRASE_MAX_LEN      128
+#define NTP_SERVER_MAX_LEN      64
 
 struct WifiConfig {
     char ssid[SSID_MAX_LEN];
     char passphrase[PASSPHRASE_MAX_LEN];
     bool secure;
+    char ntp_server[NTP_SERVER_MAX_LEN];
 };
 
 extern struct WifiConfig wifi_config;
 
 char *WifiScanResult(void);
-void WifiResetConfig(void);
+void WifiResetConfig(bool reset_ntp);
 artik_error StartSoftAP(bool start);
 artik_error StartStationConnection(bool start);
 void StartMDNSService(bool start);
@@ -66,10 +68,9 @@ struct ArtikCloudConfig {
 extern struct ArtikCloudConfig cloud_config;
 extern bool cloud_secure_dt;
 
-void CloudResetConfig(void);
+void CloudResetConfig(bool reset_dtid);
 artik_error StartCloudWebsocket(bool start);
 artik_error SendMessageToCloud(char *message);
-bool ValidateCloudDevice(void);
 int StartSDRRegistration(char **resp);
 int CompleteSDRRegistration(char **resp);
 bool CloudIsSecureDeviceType(const char *dtid);
@@ -89,7 +90,7 @@ artik_error StartWebServer(bool, enum ApiSet);
  */
 artik_error InitConfiguration(void);
 artik_error SaveConfiguration(void);
-artik_error ResetConfiguration(void);
+artik_error ResetConfiguration(bool force);
 void PrintConfiguration(void);
 
 #define API_ERROR_OK              "0"

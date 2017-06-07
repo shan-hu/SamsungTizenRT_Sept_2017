@@ -266,7 +266,7 @@ static void set_config_callback(struct http_client_t *client, struct http_req_me
             strncpy(resp, RESP_ERROR_INVALID_PARAMS_TPL, sizeof(resp)-1);
             goto exit;
         }
-        WifiResetConfig();
+        WifiResetConfig(false);
         strncpy(wifi_config.ssid, tmp->valuestring, SSID_MAX_LEN);
     }
 

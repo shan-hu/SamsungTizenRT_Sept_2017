@@ -25,21 +25,15 @@ static pthread_addr_t start_onboarding(pthread_addr_t arg)
             /* Check if we have valid ARTIK Cloud credentials */
             if ((strlen(cloud_config.device_id) == AKC_DID_LEN) &&
                 (strlen(cloud_config.device_token) == AKC_TOKEN_LEN)) {
-                /* Validate if device ID/token pair is valid */
-                if (ValidateCloudDevice()) {
-                    if (StartCloudWebsocket(true) == S_OK) {
-                        sleep(1);
-                        if (StartLwm2m(true) == S_OK) {
-                            printf("ARTIK Cloud connection started\n");
-                            goto exit;
-                        } else {
-                            printf("Failed to start DM connection, switching back to onboarding mode\n");
-                        }
+                if (StartCloudWebsocket(true) == S_OK) {
+                    if (StartLwm2m(true) == S_OK) {
+                        printf("ARTIK Cloud connection started\n");
+                        goto exit;
                     } else {
-                        printf("Failed to start ARTIK Cloud connection, switching back to onboarding mode\n");
+                        printf("Failed to start DM connection, switching back to onboarding mode\n");
                     }
                 } else {
-                    printf("Device not recognized by ARTIK Cloud, switching back to onboarding mode\n");
+                    printf("Failed to start ARTIK Cloud connection, switching back to onboarding mode\n");
                 }
             } else {
                 printf("Invalid ARTIK Cloud credentials, switching back to onboarding mode\n");
@@ -73,7 +67,7 @@ static int onboard_main(int argc, char *argv[])
 
     if (argc > 1) {
         if (!strcmp(argv[1], "reset")) {
-            ResetConfiguration();
+            ResetConfiguration(false);
             printf("Onboarding configuration was reset. Reboot the board"
                     " to return to onboarding mode\n");
             goto exit;
@@ -89,6 +83,27 @@ static int onboard_main(int argc, char *argv[])
             goto exit;
         } else if (!strcmp(argv[1], "config")) {
             PrintConfiguration();
+            goto exit;
+        }  else if (!strcmp(argv[1], "manual")) {
+            if (argc < 4) {
+                printf("Missing parameter\n");
+                printf("Usage: onboard manual <device ID> <device token>\n");
+                goto exit;
+            }
+
+            strncpy(cloud_config.device_id, argv[2], AKC_DID_LEN);
+            strncpy(cloud_config.device_token, argv[3], AKC_TOKEN_LEN);
+            SaveConfiguration();
+            goto exit;
+        }  else if (!strcmp(argv[1], "ntp")) {
+            if (argc < 3) {
+                printf("Missing parameter\n");
+                printf("Usage: onboard ntp <NTP server URL>\n");
+                goto exit;
+            }
+
+            strncpy(wifi_config.ntp_server, argv[2], NTP_SERVER_MAX_LEN);
+            SaveConfiguration();
             goto exit;
         }
     }
