@@ -163,8 +163,10 @@ static int run(struct iperf_test *test)
 		break;
 	case 'c':
 		if (iperf_run_client(test) < 0) {
-			close(test->ctrl_sck);
-			iperf_free_test(test);
+			if (test->ctrl_sck > 0) {
+				close(test->ctrl_sck);
+				iperf_free_test(test);
+			}
 			printf("error - %s\n", iperf_strerror(i_errno));
 			iperf_client_end(test);
 			goto run_exit;
